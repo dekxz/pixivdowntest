@@ -8,12 +8,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 
 class MainActivity : ComponentActivity() {
 
     private val vm: MainViewModel by viewModels()
     private var lastClipboard: String? = null
+
+    /** System file picker for "Pick existing history file". */
+    private val pickHistoryFile =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) vm.useHistoryFile(uri)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,7 +31,7 @@ class MainActivity : ComponentActivity() {
             MainScreen(
                 vm = vm,
                 onOpenFolder = ::openDownloads,
-                onShareLog = ::shareLog,
+                onPickHistory = { pickHistoryFile.launch(arrayOf("*/*")) },
             )
         }
     }
@@ -62,19 +69,5 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             vm.message.value = MainViewModel.Msg("Error", "Could not open folder: ${e.message}\nFiles are in Downloads/${MediaExporter.FOLDER}.")
         }
-    }
-
-    private fun shareLog() {
-        val uri = vm.history.uri()
-        if (uri == null) {
-            vm.message.value = MainViewModel.Msg("History log", "No downloads have been logged yet.\nThe log is saved as ${DownloadHistory.NAME} in Downloads/${MediaExporter.FOLDER}.")
-            return
-        }
-        val send = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(send, DownloadHistory.NAME))
     }
 }

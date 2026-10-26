@@ -1,6 +1,7 @@
 package com.pixivdownloader.app
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -38,6 +39,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val logText = MutableStateFlow("")
     val busy = MutableStateFlow(false)
     val message = MutableStateFlow<Msg?>(null)
+    val historyLabel = MutableStateFlow(history.label())
+    val historyPicked = MutableStateFlow(history.isPicked())
 
     private var job: Job? = null
     @Volatile private var cancelled = false
@@ -76,6 +79,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         token.value = clean
         tokenStatus.value = statusFor(clean)
         show("Success", "PHPSESSID saved successfully!")
+    }
+
+    // ---- history file ----
+    private fun refreshHistoryInfo() {
+        historyLabel.value = history.label()
+        historyPicked.value = history.isPicked()
+    }
+
+    /** "Pick existing history file": use a file chosen with the system file picker. */
+    fun useHistoryFile(uri: Uri) {
+        if (busy.value) { show("Please wait", "Finish or cancel the current download first."); return }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) { history.usePickedFile(uri) }
+            refreshHistoryInfo()
+            show(if (result.ok) "History file" else "Could not use that file", result.message)
+        }
+    }
+
+    fun useDefaultHistory() {
+        if (busy.value) { show("Please wait", "Finish or cancel the current download first."); return }
+        history.useDefault()
+        refreshHistoryInfo()
+        show("History file", "Using the app's own ${DownloadHistory.NAME} in Downloads/${MediaExporter.FOLDER} again.")
     }
 
     // ---- download / cancel ----

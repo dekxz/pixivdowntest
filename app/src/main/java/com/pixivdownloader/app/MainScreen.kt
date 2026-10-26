@@ -63,7 +63,7 @@ private val Gray = Color(0xFFA0A0A0)
 fun MainScreen(
     vm: MainViewModel,
     onOpenFolder: () -> Unit,
-    onShareLog: () -> Unit,
+    onPickHistory: () -> Unit,
 ) {
     MaterialTheme(colorScheme = WinDark) {
         val token by vm.token.collectAsState()
@@ -80,6 +80,8 @@ fun MainScreen(
         val log by vm.logText.collectAsState()
         val busy by vm.busy.collectAsState()
         val message by vm.message.collectAsState()
+        val historyLabel by vm.historyLabel.collectAsState()
+        val historyPicked by vm.historyPicked.collectAsState()
 
         val imageGroupOn = type != ContentType.UGOIRA
         val ugoiraGroupOn = type != ContentType.IMAGE
@@ -238,7 +240,15 @@ fun MainScreen(
                     }
                     OutlinedButton(onClick = onOpenFolder, modifier = Modifier.weight(1f)) { Text("Open Folder") }
                 }
-                TextButton(onClick = onShareLog, modifier = Modifier.fillMaxWidth()) { Text("Share history log") }
+                Text(historyLabel, fontSize = 11.sp, color = Gray, maxLines = 2)
+                TextButton(onClick = onPickHistory, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Pick existing history file")
+                }
+                if (historyPicked) {
+                    TextButton(onClick = vm::useDefaultHistory, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Use the app's own history file instead", fontSize = 12.sp)
+                    }
+                }
             }
         }
 
