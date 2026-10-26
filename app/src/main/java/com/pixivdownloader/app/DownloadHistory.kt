@@ -8,13 +8,14 @@ import android.os.Environment
 import android.provider.MediaStore
 
 /**
- * download_history.log: ONE file in Downloads/PixivDownloader, created the first time and then
+ * pixiv_downloader_history.log: ONE file in Downloads/PixivDownloader, created the first time and then
  * updated in place. One "<canonical artwork url>|<format identifier>" line per completed download.
  *
  * To make sure the existing file is always found (and a second copy is never created):
  *  - the MediaStore id of the log is remembered in SharedPreferences and checked first;
  *  - otherwise the file is looked up by name prefix and matched to our folder in code
- *    (Android may have renamed it to ".log.txt" or "download_history (1).log");
+ *    (Android may have renamed it to ".log.txt" or "pixiv_downloader_history (1).log");
+ *  - a log from older builds ("download_history.log") is picked up too, merged and renamed to the new name;
  *  - any extra copies are merged into the first one and deleted.
  *
  * Note: Android only lets an app read files it created itself. After an uninstall/reinstall
@@ -23,14 +24,20 @@ import android.provider.MediaStore
 class DownloadHistory(private val context: Context) {
 
     companion object {
-        const val NAME = "download_history.log"
-        private const val PREFIX = "download_history"
+        const val NAME = "pixiv_downloader_history.log"
+        private const val PREFIX = "pixiv_downloader_history"
+        /** Name used by earlier builds; kept so an existing history is not lost. */
+        private const val LEGACY_PREFIX = "download_history"
         private const val PREF_ID = "log_id"
     }
 
     private val resolver get() = context.contentResolver
     private val prefs = context.getSharedPreferences("pixiv_history", Context.MODE_PRIVATE)
     private val folderPath = "${Environment.DIRECTORY_DOWNLOADS}/${MediaExporter.FOLDER}"
+
+    init {
+        migrateLegacyName()
+    }
 
     private fun uriFor(id: Long): Uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
 
@@ -53,8 +60,8 @@ class DownloadHistory(private val context: Context) {
             resolver.query(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                 arrayOf(MediaStore.Downloads._ID, MediaStore.Downloads.RELATIVE_PATH),
-                "${MediaStore.Downloads.DISPLAY_NAME} LIKE ?",
-                arrayOf("$PREFIX%"),
+                "${MediaStore.Downloads.DISPLAY_NAME} LIKE ? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?",
+                arrayOf("$PREFIX%", "$LEGACY_PREFIX%"),
                 "${MediaStore.Downloads._ID} ASC"
             )?.use { c ->
                 while (c.moveToNext()) {
@@ -68,6 +75,21 @@ class DownloadHistory(private val context: Context) {
     }
 
     fun uri(): Uri? = allLogs().firstOrNull()
+
+    /** If the primary log still has the old file name, rename it to NAME (content is kept). */
+    @Synchronized
+    private fun migrateLegacyName() {
+        try {
+            val primary = allLogs().firstOrNull() ?: return
+            val current = resolver.query(primary, arrayOf(MediaStore.Downloads.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            } ?: return
+            if (current.startsWith(LEGACY_PREFIX, ignoreCase = true)) {
+                val values = ContentValues().apply { put(MediaStore.Downloads.DISPLAY_NAME, NAME) }
+                resolver.update(primary, values, null, null)
+            }
+        } catch (_: Exception) {}
+    }
 
     private fun readText(uri: Uri): String =
         try {
